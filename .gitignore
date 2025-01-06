@@ -1,0 +1,12 @@
+# Ignore dataset files
+data/
+*.zip
+*.tgz
+
+# Ignore model checkpoints
+*.pth
+
+# Ignore system files
+*.pyc
+__pycache__/
+.DS_Store
