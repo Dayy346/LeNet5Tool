@@ -13,9 +13,9 @@ app = Flask(__name__)
 
 # This was how u defined it so I kept it
 class SimpleCNN(nn.Module):
-    def __init__(self):
+    def __init__(self ):
         super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=2)  # C1 layer
+        self.conv1 = nn.Conv2d(3, 6, kernel_size=5, stride=1, padding=2)  # C1 layer
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)                # S2 layer
         self.conv2 = nn.Conv2d(6, 16, kernel_size=5, stride=1)            # C3 layer
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)                # S4 layer
@@ -59,7 +59,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Automat
 model = SimpleCNN().to(device)
 train_loader = None
 test_loader = None
-model_path = "./LeNet5_1.pth"
+model_path = "./CustomLeNetModel.pth"
 
 # Weight initialization
 def init_weights(m):
@@ -73,21 +73,79 @@ def init_weights(m):
 model.apply(init_weights)
 
 # Endpoint: Load Dataset
+import shutil
+import zipfile
+
 @app.route('/upload-dataset', methods=['POST'])
 def upload_dataset():
     global train_loader, test_loader
-    # Data preparation
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),  # Resize to match model input
-        transforms.Pad(2),           # Padding for consistent dimensions
-        transforms.ToTensor()
-    ])
-    # Default to MNIST dataset
-    train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
-    test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
-    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True, num_workers=0)
-    test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False, num_workers=0)
-    return jsonify({"message": "No dataset uploaded. Defaulted to MNIST dataset."})
+
+    if 'file' in request.files:  # Check if a custom dataset is uploaded
+        # Save the uploaded ZIP file
+         
+        uploaded_file = request.files['file']
+        dataset_zip_path = './data/dataset.zip'
+        dataset_extract_path = './data/dataset'
+        uploaded_file.save(dataset_zip_path)
+
+        # Extract the ZIP file
+        if os.path.exists(dataset_extract_path):
+            shutil.rmtree(dataset_extract_path)  # Remove existing dataset folder
+        os.makedirs(dataset_extract_path, exist_ok=True)
+        with zipfile.ZipFile(dataset_zip_path, 'r') as zip_ref:
+            zip_ref.extractall(dataset_extract_path)
+
+        # Dynamically find train/test folders
+        try:
+            train_path = os.path.join(dataset_extract_path, 'train')
+            test_path = os.path.join(dataset_extract_path, 'test')
+
+            if not os.path.exists(train_path) or not os.path.exists(test_path):
+                # Look deeper if 'train' and 'test' aren't directly in root
+                for root, dirs, files in os.walk(dataset_extract_path):
+                    if 'train' in dirs and 'test' in dirs:
+                        train_path = os.path.join(root, 'train')
+                        test_path = os.path.join(root, 'test')
+                        break
+
+            # Load the dataset using ImageFolder
+            transform = transforms.Compose([
+                # transforms.Grayscale(num_output_channels=3),  # Convert RGB to grayscale
+                transforms.Resize((32, 32)),  # Resize to match model input
+                # transforms.Pad(2),           # Padding for consistent dimensions
+                transforms.RandomHorizontalFlip(),  # Augment data
+                transforms.RandomRotation(10),  # Add rotation
+                transforms.ToTensor(),       # Convert images to tensors
+                transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize images
+            ])
+            train_dataset = datasets.ImageFolder(root=train_path, transform=transform)
+            test_dataset = datasets.ImageFolder(root=test_path, transform=transform)
+
+            # Create DataLoaders
+            train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+            test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+            return jsonify({"message": "Custom dataset uploaded and processed successfully!"})
+        except Exception as e:
+            return jsonify({"error": f"Failed to process dataset: {str(e)}"}), 400
+
+    else:
+        # Default to MNIST dataset
+#########Currently does not work because of the way the model is set up, and the grayscale conversion in the first layer 
+        transform = transforms.Compose([
+            transforms.Resize((28, 28)),  # Resize to match model input
+            transforms.Pad(2),           # Padding for consistent dimensions
+            transforms.ToTensor()
+        ])
+        train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+        test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
+
+        train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+        
+        model = SimpleCNN(input_channels=1).to(device) #reinitalize model becuase it is grayscale 
+        model.apply(init_weights)
+        return jsonify({"message": "No dataset uploaded. Defaulted to MNIST dataset."})
 
 # Endpoint: Train Model
 @app.route('/train', methods=['POST'])
@@ -96,7 +154,7 @@ def train_model():
     if train_loader is None or test_loader is None:
         return jsonify({"error": "Dataset not uploaded or processed yet!"}), 400
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     train_errors = []  # List to store training errors
     test_errors = []   # List to store test errors
     epochs = 20
