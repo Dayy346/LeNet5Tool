@@ -4,7 +4,7 @@ import requests
 server_url = "http://127.0.0.1:5000"
 
 # Path to your dataset
-dataset_path = r"C:\Users\dayya\Downloads\CustomTest.zip"
+dataset_path = r"C:\Users\dayya\Downloads\flowersdata.zip"
 
 # Test /upload-dataset
 with open(dataset_path, 'rb') as file:

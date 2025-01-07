@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,21 +7,28 @@ from torch.utils.data import DataLoader
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+from flask_cors import CORS # was having an issue where the local host counldnt connect to the server, this was the solution
+from flask import send_file
+
+
 
 # Flask app
 app = Flask(__name__)
-
-# This was how u defined it so I kept it
+CORS(app)  # was having an issue where the local host counldnt connect to the server, this was the solution
+# Define the model
 class SimpleCNN(nn.Module):
     def __init__(self ):
         super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, kernel_size=5, stride=1, padding=2)  # C1 layer
+        self.conv1 = nn.Conv2d(3,6, kernel_size=5, stride=1, padding=2)  # C1 layer #Changed input channels to 3 for RGB and 1 for grayscale
+        self.bn1 = nn.BatchNorm2d(6)  # BatchNorm after conv1
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)                # S2 layer
         self.conv2 = nn.Conv2d(6, 16, kernel_size=5, stride=1)            # C3 layer
+        self.bn2 = nn.BatchNorm2d(16)  # BatchNorm after conv2
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)                # S4 layer
         self.fc1 = nn.Linear(16 * 6 * 6, 120)                            # C5 fully connected layer
         self.fc2 = nn.Linear(120, 84)                                    # F6 fully connected layer
-        self.num_classes = 10
+        self.num_classes = 5 # Number of classes in the dataset
+        self.dropout = nn.Dropout(0.1)  # Add dropout, this was added because i noticed that the model was overfitting, the train accuracy imporved significantly but the test accuracy wasnt as good
         self.centers = nn.Parameter(torch.randn(self.num_classes, 84))   # Class centroids
         self.beta = nn.Parameter(torch.randn(self.num_classes) * 0.1 + 1.0)  # Scaling factors
 
@@ -86,6 +93,7 @@ def upload_dataset():
         uploaded_file = request.files['file']
         dataset_zip_path = './data/dataset.zip'
         dataset_extract_path = './data/dataset'
+        print("Saving uploaded file...")
         uploaded_file.save(dataset_zip_path)
 
         # Extract the ZIP file
@@ -109,14 +117,17 @@ def upload_dataset():
                         break
 
             # Load the dataset using ImageFolder
+            # Data augmentation
             transform = transforms.Compose([
-                # transforms.Grayscale(num_output_channels=3),  # Convert RGB to grayscale
-                transforms.Resize((32, 32)),  # Resize to match model input
-                # transforms.Pad(2),           # Padding for consistent dimensions
-                transforms.RandomHorizontalFlip(),  # Augment data
-                transforms.RandomRotation(10),  # Add rotation
-                transforms.ToTensor(),       # Convert images to tensors
-                transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize images
+                transforms.Resize((28, 28)),  # Resize to match model input
+                transforms.Pad(2),           # Padding for consistent dimensions
+                # transforms.Grayscale(num_output_channels=1), # Convert to grayscale
+                transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images
+                transforms.RandomRotation(15),          # Randomly rotate
+                transforms.ColorJitter(brightness=0.2, contrast=0.2),  # Adjust colors
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
+                # transforms.Normalize(mean=[0.5], std=[0.5])  # Adjusted for grayscale images
             ])
             train_dataset = datasets.ImageFolder(root=train_path, transform=transform)
             test_dataset = datasets.ImageFolder(root=test_path, transform=transform)
@@ -126,12 +137,17 @@ def upload_dataset():
             test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
             return jsonify({"message": "Custom dataset uploaded and processed successfully!"})
+        
+            # Start training after successful dataset preparation
+            
+            return train_model()
         except Exception as e:
             return jsonify({"error": f"Failed to process dataset: {str(e)}"}), 400
 
     else:
         # Default to MNIST dataset
 #########Currently does not work because of the way the model is set up, and the grayscale conversion in the first layer 
+        transforms.Grayscale(num_output_channels=3) #POTENTIAL SOLUTION
         transform = transforms.Compose([
             transforms.Resize((28, 28)),  # Resize to match model input
             transforms.Pad(2),           # Padding for consistent dimensions
@@ -147,6 +163,44 @@ def upload_dataset():
         model.apply(init_weights)
         return jsonify({"message": "No dataset uploaded. Defaulted to MNIST dataset."})
 
+import time  # Import for timing
+
+@app.route('/epoch-time', methods=['POST'])
+def epoch_time():
+    global train_loader
+    if train_loader is None:
+        return jsonify({"error": "Dataset not uploaded or processed yet!"}), 400
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+    num_epochs = 1  # Only train for one epoch to measure time
+    data = request.get_json()
+    num_classes = int(data.get("num_classes", 5))  # Default to 5 classes
+    print(f"Received num_classes: {num_classes}")  # Log num_classes for debugging
+
+    # Update model's number of classe
+    model.num_classes = num_classes
+    model.centers = nn.Parameter(torch.randn(model.num_classes, 84).to(device))  # Update centroids
+    model.beta = nn.Parameter(torch.randn(model.num_classes).to(device) * 0.1 + 1.0)  # Update scaling factors
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4) #L2 regularization
+
+    # Record the start time
+    start_time = time.time()
+    for epoch in range(num_epochs):
+        model.train()
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
+            optimizer.zero_grad()
+            probabilities, _, _ = model(images)
+            loss = confidence_loss(probabilities, labels)
+            loss.backward()
+            optimizer.step()
+        # Record end time after the first epoch
+    end_time = time.time()
+
+    epoch_duration = end_time - start_time
+    return jsonify({"epoch_time": epoch_duration})
+
+
 # Endpoint: Train Model
 @app.route('/train', methods=['POST'])
 def train_model():
@@ -154,12 +208,22 @@ def train_model():
     if train_loader is None or test_loader is None:
         return jsonify({"error": "Dataset not uploaded or processed yet!"}), 400
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # Get number of epochs from the request
+    data = request.get_json()
+    num_epochs = int(data.get("num_epochs", 1))  # Default to 1 epoch
+    num_classes = int(data.get("num_classes", 5))  # Default to 5 classes
+
+    # Update model's number of classe
+    model.num_classes = num_classes
+    model.centers = nn.Parameter(torch.randn(model.num_classes, 84).to(device))  # Update centroids
+    model.beta = nn.Parameter(torch.randn(model.num_classes).to(device) * 0.1 + 1.0)  # Update scaling factors
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4) #L2 regularization
     train_errors = []  # List to store training errors
     test_errors = []   # List to store test errors
-    epochs = 20
 
-    for epoch in range(epochs):
+    # Training loop
+    for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
         correct_train = 0
@@ -197,9 +261,13 @@ def train_model():
         test_error = 1 - (correct_test / total_test)
         test_errors.append(test_error)
         print(f"Epoch {epoch + 1}, Test Accuracy: {test_accuracy:.2f}%")
+        # Send progress to frontend
+        progress = int((epoch + 1) / num_epochs * 100)
+        print(f"Progress: {progress}%")
 
     torch.save(model.state_dict(), model_path)  # Save the model
     return jsonify({"message": "Training completed!", "train_errors": train_errors, "test_errors": test_errors})
+
 
 # Endpoint: Test Model
 @app.route('/test', methods=['POST'])
@@ -219,6 +287,14 @@ def test_model():
             total_test += labels.size(0)
     test_accuracy = 100 * correct_test / total_test
     return jsonify({"message": f"Test completed! Accuracy: {test_accuracy:.2f}%"})
+
+@app.route('/download-model', methods=['GET']) # Endpoint to download the trained model
+def download_model():
+    try:
+        return send_file(model_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
