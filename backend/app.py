@@ -9,7 +9,8 @@ import os
 import matplotlib.pyplot as plt
 from flask_cors import CORS # was having an issue where the local host counldnt connect to the server, this was the solution
 from flask import send_file
-
+from pathlib import Path
+is_mnist = False #for default dataset
 
 
 # Flask app
@@ -27,7 +28,7 @@ class SimpleCNN(nn.Module):
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)                # S4 layer
         self.fc1 = nn.Linear(16 * 6 * 6, 120)                            # C5 fully connected layer
         self.fc2 = nn.Linear(120, 84)                                    # F6 fully connected layer
-        self.num_classes = 5 # Number of classes in the dataset
+        self.num_classes = 10 # Number of classes in the dataset
         self.dropout = nn.Dropout(0.1)  # Add dropout, this was added because i noticed that the model was overfitting, the train accuracy imporved significantly but the test accuracy wasnt as good
         self.centers = nn.Parameter(torch.randn(self.num_classes, 84))   # Class centroids
         self.beta = nn.Parameter(torch.randn(self.num_classes) * 0.1 + 1.0)  # Scaling factors
@@ -87,6 +88,29 @@ import zipfile
 def upload_dataset():
     global train_loader, test_loader
 
+    use_grayscale = request.form.get("useGrayscale", "false").lower() == "true"
+
+    # Build transformation pipeline, had it at the end right before trainging but changed due to grayscaling option being added
+    # Data augmentation
+    if use_grayscale:
+        transform = transforms.Compose([
+            transforms.Resize((28, 28)),
+            transforms.Pad(2),
+            transforms.Grayscale(num_output_channels=1),  # Convert to grayscale
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize for grayscale
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.Resize((28, 28)),
+            transforms.Pad(2),
+            transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images
+            transforms.RandomRotation(15),          # Randomly rotate
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),  # Adjust colors
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize for RGB
+        ])
+
     if 'file' in request.files:  # Check if a custom dataset is uploaded
         # Save the uploaded ZIP file
          
@@ -117,18 +141,8 @@ def upload_dataset():
                         break
 
             # Load the dataset using ImageFolder
-            # Data augmentation
-            transform = transforms.Compose([
-                transforms.Resize((28, 28)),  # Resize to match model input
-                transforms.Pad(2),           # Padding for consistent dimensions
-                # transforms.Grayscale(num_output_channels=1), # Convert to grayscale
-                transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images
-                transforms.RandomRotation(15),          # Randomly rotate
-                transforms.ColorJitter(brightness=0.2, contrast=0.2),  # Adjust colors
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
-                # transforms.Normalize(mean=[0.5], std=[0.5])  # Adjusted for grayscale images
-            ])
+            
+          
             train_dataset = datasets.ImageFolder(root=train_path, transform=transform)
             test_dataset = datasets.ImageFolder(root=test_path, transform=transform)
 
@@ -136,31 +150,40 @@ def upload_dataset():
             train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
             test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
+            # Adjust model for grayscale input
+            if use_grayscale:
+                model.conv1 = nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=2)  # Adjust input channels for grayscale
+            else:
+                model.conv1 = nn.Conv2d(3, 6, kernel_size=5, stride=1, padding=2)  # Adjust input channels for RGB
+
+            model.apply(init_weights)  # Reinitialize weights for updated model
             return jsonify({"message": "Custom dataset uploaded and processed successfully!"})
         
             # Start training after successful dataset preparation
             
-            return train_model()
+            
         except Exception as e:
             return jsonify({"error": f"Failed to process dataset: {str(e)}"}), 400
 
     else:
+        global is_mnist
+        is_mnist = True  # Set the flag for MNIST
         # Default to MNIST dataset
-#########Currently does not work because of the way the model is set up, and the grayscale conversion in the first layer 
-        transforms.Grayscale(num_output_channels=3) #POTENTIAL SOLUTION
         transform = transforms.Compose([
-            transforms.Resize((28, 28)),  # Resize to match model input
-            transforms.Pad(2),           # Padding for consistent dimensions
-            transforms.ToTensor()
+            transforms.Resize((28, 28)),
+            transforms.Pad(2),
+            transforms.Grayscale(num_output_channels=1),  # Default to grayscale for MNIST
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize
         ])
         train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
         test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
-
         train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-        
-        model = SimpleCNN(input_channels=1).to(device) #reinitalize model becuase it is grayscale 
-        model.apply(init_weights)
+
+        # Adjust model for MNIST grayscale
+        model.conv1 = nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=2)
+        model.apply(init_weights)  # Reinitialize weights for updated model
         return jsonify({"message": "No dataset uploaded. Defaulted to MNIST dataset."})
 
 import time  # Import for timing
@@ -174,7 +197,7 @@ def epoch_time():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
     num_epochs = 1  # Only train for one epoch to measure time
     data = request.get_json()
-    num_classes = int(data.get("num_classes", 5))  # Default to 5 classes
+    num_classes = int(data.get("num_classes", 10))  # Default to 10 classes
     print(f"Received num_classes: {num_classes}")  # Log num_classes for debugging
 
     # Update model's number of classe
@@ -211,7 +234,7 @@ def train_model():
     # Get number of epochs from the request
     data = request.get_json()
     num_epochs = int(data.get("num_epochs", 1))  # Default to 1 epoch
-    num_classes = int(data.get("num_classes", 5))  # Default to 5 classes
+    num_classes = int(data.get("num_classes", 10))  # Default to 10 classes
 
     # Update model's number of classe
     model.num_classes = num_classes
@@ -221,7 +244,8 @@ def train_model():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4) #L2 regularization
     train_errors = []  # List to store training errors
     test_errors = []   # List to store test errors
-
+    train_accuracies = []  # Store train accuracies for each epoch
+    test_accuracies = []   # Store test accuracies for each epoch
     # Training loop
     for epoch in range(num_epochs):
         model.train()
@@ -241,6 +265,7 @@ def train_model():
             total_train += labels.size(0)
 
         train_accuracy = 100 * correct_train / total_train
+        train_accuracies.append(train_accuracy)
         train_error = 1 - (correct_train / total_train)
         train_errors.append(train_error)
         print(f"Epoch {epoch + 1}, Loss: {running_loss / len(train_loader):.4f}, Train Accuracy: {train_accuracy:.2f}%")
@@ -258,6 +283,7 @@ def train_model():
                 total_test += labels.size(0)
 
         test_accuracy = 100 * correct_test / total_test
+        test_accuracies.append(test_accuracy)
         test_error = 1 - (correct_test / total_test)
         test_errors.append(test_error)
         print(f"Epoch {epoch + 1}, Test Accuracy: {test_accuracy:.2f}%")
@@ -266,8 +292,10 @@ def train_model():
         print(f"Progress: {progress}%")
 
     torch.save(model.state_dict(), model_path)  # Save the model
-    return jsonify({"message": "Training completed!", "train_errors": train_errors, "test_errors": test_errors})
-
+    return jsonify({"message": "Training completed!", "train_errors": train_errors, "test_errors": test_errors,
+    "train_accuracy": train_accuracies[-1],  # Return the final train accuracy
+    "test_accuracy": test_accuracies[-1]    # Return the final test accuracy
+    })
 
 # Endpoint: Test Model
 @app.route('/test', methods=['POST'])
@@ -295,6 +323,85 @@ def download_model():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+#|Images test on recent model route
+from PIL import Image
+# Endpoint: Test a single image
+@app.route('/test-image', methods=['POST'])
+def test_image():
+    global is_mnist
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No image file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No image file selected"}), 400
+
+    # Save the image temporarily
+    image_path = "./temp_image.jpg"
+    file.save(image_path)
+
+    try:
+        # Determine the transformation pipeline
+        if is_mnist:
+            transform = transforms.Compose([
+                transforms.Grayscale(num_output_channels=1),  # Ensure grayscale for MNIST
+                transforms.Resize((28, 28)),
+                transforms.Pad(2),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5])
+            ])
+            class_names = [str(i) for i in range(10)]  # MNIST class names
+        else:
+            use_grayscale = request.form.get("useGrayscale", "false").lower() == "true"
+            if use_grayscale:
+                transform = transforms.Compose([
+                    transforms.Grayscale(num_output_channels=1),
+                    transforms.Resize((28, 28)),
+                    transforms.Pad(2),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5], std=[0.5])
+                ])
+            else:
+                transform = transforms.Compose([
+                    transforms.Resize((28, 28)),
+                    transforms.Pad(2),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+                ])
+            # Dynamically determine class names
+            dataset_root = './data/dataset'
+            train_folder = os.path.join(dataset_root, 'train')
+            if os.path.exists(train_folder):
+                class_names = sorted([d for d in os.listdir(train_folder) if os.path.isdir(os.path.join(train_folder, d))])
+            else:
+                return jsonify({"error": "Training folder not found in dataset."}), 400
+
+        # Preprocess the image
+        image = Image.open(image_path)
+        image = image.convert("L") if is_mnist or use_grayscale else image.convert("RGB")
+        image = transform(image).unsqueeze(0).to(device)
+
+        # Predict
+        model.eval()
+        with torch.no_grad():
+            probabilities, _, _ = model(image)
+            predicted_index = torch.argmax(probabilities, dim=1).item()
+
+        # Remove the temporary file
+        os.remove(image_path)
+
+        # Validate predicted index
+        if predicted_index >= len(class_names):
+            return jsonify({"error": "Predicted class index out of bounds."}), 400
+
+        predicted_class_name = class_names[predicted_index]
+        return jsonify({"predicted_class": predicted_class_name})
+
+    except Exception as e:
+        print(f"Error processing image: {e}")
+        return jsonify({"error": f"Error processing image: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

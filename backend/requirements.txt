@@ -1,0 +1,7 @@
+torch==2.0.1
+torchvision==0.15.2
+numpy==1.24.3
+flask==2.3.2
+flask-cors==3.0.10
+matplotlib==3.7.1
+Pillow==9.5.0
