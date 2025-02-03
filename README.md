@@ -1,16 +1,14 @@
 # LeNet-5 Based CNN Model Generator
 
 ## Overview
-This project is a comprehensive implementation and extension of the LeNet-5 Convolutional Neural Network (CNN), originally designed for handwritten digit recognition. The project evolved from a machine learning assignment into a versatile tool capable of adapting to various datasets and classification tasks, leveraging dynamic front-end and back-end integration.
-
-The core objective was to build and enhance the LeNet-5 model, initially trained on the MNIST dataset, and then expand its capabilities to process RGB data, incorporate advanced regularization techniques, and provide a user-friendly interface for training and testing custom datasets.
+This project is a comprehensive implementation and extension of the LeNet-5 Convolutional Neural Network, originally designed for handwritten digit recognition on the MNIST dataset. This project evolved from a machine learning assignment into a versatile tool capable of adapting to various datasets and classification tasks, Showcasing the versatility of deep learning in real world applications in a full stack web application. The objective was to build and enhance the LeNet 5 model, initially trained on the MNIST dataset, and then expand its capabilities to process RGB data, incorporate advanced regularization techniques, and provide a user friendly interface for training and testing custom datasets. Then producing a downloadable model for deployment.
 
 ---
 
 ## Features
 
 1. **Dynamic Model Adaptation**
-   - Initially trained on grayscale images (MNIST dataset) using LeNet-5, the model was modified to handle RGB datasets effectively.
+   - Initially trained on grayscale images using LeNet5, the model was modified to handle RGB datasets effectively.
    - Incorporates a toggle to switch between grayscale and RGB inputs seamlessly, allowing adaptability for diverse datasets.
 
 2. **Regularization and Overfitting Prevention**
@@ -89,7 +87,7 @@ After achieving initial success with MNIST, the model was significantly improved
   ```
 
 4. **Train a Model**
-- Upload a dataset (ZIP file containing `train` and `test` folders).
+- Upload a dataset (ZIP file containing `train` and `test` folders with images classified by folders(classes)).
 - Configure settings like the number of epochs and input format (grayscale/RGB).
 - Click "Upload and Train" to start training.
 
@@ -125,6 +123,7 @@ The final model demonstrated exceptional flexibility and adaptability:
 - Extend support for additional image formats like PNG.
 - Implement a feature to visualize intermediate feature maps of the CNN.
 - Add options for hyperparameter tuning directly from the frontend.
+- Dockerize the application for easy deployment.
 
 ---
 

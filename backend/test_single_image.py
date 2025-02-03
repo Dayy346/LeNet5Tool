@@ -18,7 +18,7 @@ class SimpleCNN(nn.Module):
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)                # S4 layer
         self.fc1 = nn.Linear(16 * 6 * 6, 120)                            # C5 fully connected layer
         self.fc2 = nn.Linear(120, 84)                                    # F6 fully connected layer
-        self.num_classes = 5
+        self.num_classes = 4
         self.dropout = nn.Dropout(0.1)  # Add dropout to reduce overfitting
         self.centers = nn.Parameter(torch.randn(self.num_classes, 84))   # Class centroids
         self.beta = nn.Parameter(torch.randn(self.num_classes) * 0.1 + 1.0)  # Scaling factors
@@ -50,11 +50,12 @@ class SimpleCNN(nn.Module):
 def preprocess_image(image_path):
  # Data augmentation
     transform = transforms.Compose([
-                transforms.Resize((32, 32)),
+                transforms.Resize((28, 28)),  # Resize to match model input
+                transforms.Pad(2),           # Padding for consistent dimensions
                 # transforms.Grayscale(num_output_channels=1), # Convert to grayscale
                 transforms.RandomHorizontalFlip(p=0.5),  # Randomly flip images
                 transforms.RandomRotation(15),          # Randomly rotate
-                # transforms.ColorJitter(brightness=0.2, contrast=0.2),  # Adjust colors
+                transforms.ColorJitter(brightness=0.2, contrast=0.2),  # Adjust colors
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
                 # transforms.Normalize(mean=[0.5], std=[0.5])  # Adjusted for grayscale images
