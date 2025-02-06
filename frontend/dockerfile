@@ -1,20 +1,17 @@
-# Use an official Node.js image as the base image
-FROM node:18
+# Use an official Python runtime as the base image
+FROM python:3.9
 
-# Set working directory inside the container
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy frontend files into the container
-COPY frontend/ /app
+# Copy only necessary files
+COPY . /app  # COPY everything from the `backend` directory to `/app` in the container
 
 # Install dependencies
-RUN npm install
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Build the React app
-RUN npm run build
+# Expose the Flask app port
+EXPOSE 5000
 
-# Expose the frontend port
-EXPOSE 3000
-
-# Start the React app using a lightweight web server
-CMD ["npx", "serve", "-s", "build"]
+# Run the Flask app
+CMD ["python", "app.py"]
