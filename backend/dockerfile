@@ -4,11 +4,14 @@ FROM python:3.9
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the backend files into the container
-COPY backend/ /app  # <-- PROBLEM HERE
+# Copy the backend dependencies
+COPY backend/requirements.txt /app/requirements.txt
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the entire backend code
+COPY backend/ /app
 
 # Expose the Flask app port
 EXPOSE 5000
