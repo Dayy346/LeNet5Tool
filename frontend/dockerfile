@@ -1,20 +1,26 @@
-# Use an official Node.js runtime as the base image
-FROM node:16
+ # Use an official Node.js runtime as the base image
+ FROM node:16
 
-# Set the working directory in the container
-WORKDIR /app
-
-# Copy the frontend dependencies
-COPY frontend/package.json frontend/package-lock.json /app/
-
-# Install dependencies
-RUN npm install
-
-# Copy the frontend source code
-COPY frontend/ /app
-
-# Expose the React app port
-EXPOSE 3000
-
-# Run the frontend app
-CMD ["npm", "start"]
+ # Set the working directory in the container
+ WORKDIR /app
+ 
+ # Copy the frontend dependencies
+ COPY frontend/package.json frontend/package-lock.json /app/
+ 
+ # Install dependencies
+ RUN npm install
+ 
+ # Copy the frontend source code
+ COPY frontend/ /app
+ 
+ # Expose the React app port
+ EXPOSE 3000
+ 
+ # Set API base URL for React
+ ENV REACT_APP_API_BASE_URL=http://backend:5000
+ 
+ # Build the React app (optional, for production use)
+ # RUN npm run build
+ 
+ # Run the frontend app
+ CMD ["npm", "start"]
