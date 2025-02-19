@@ -10,11 +10,15 @@ import matplotlib.pyplot as plt
 from flask_cors import CORS # was having an issue where the local host counldnt connect to the server, this was the solution
 from flask import send_file
 from pathlib import Path
+from flask_cors import CORS
+
 is_mnist = False #for default dataset
 
 
 # Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for frontend requests
+
 CORS(app)  # was having an issue where the local host counldnt connect to the server, this was the solution
 # Define the model
 class SimpleCNN(nn.Module):
@@ -403,5 +407,5 @@ def test_image():
         print(f"Error processing image: {e}")
         return jsonify({"error": f"Error processing image: {str(e)}"}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)  # Ensure it works inside Docker
