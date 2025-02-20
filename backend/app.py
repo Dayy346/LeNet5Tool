@@ -167,7 +167,10 @@ def upload_dataset():
             
             
         except Exception as e:
+            import traceback
+            print(traceback.format_exc())  # Print the full error to logs
             return jsonify({"error": f"Failed to process dataset: {str(e)}"}), 400
+
 
     else:
         global is_mnist
