@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Copy package files separately to leverage Docker caching
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm install && npm install cross-env --save-dev
+RUN npm install && npm install cross-env react-scripts --save-dev
 
 # Copy the entire frontend code
 COPY frontend/ .
