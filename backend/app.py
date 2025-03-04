@@ -45,12 +45,19 @@ class SimpleCNN(nn.Module):
         self.beta.data = torch.clamp(self.beta.data, min=1e-3, max=10.0)  # Keeps values in a range
 
         x = 1.7159 * torch.tanh(self.conv1(x) * 2 / 3)
+        x = self.bn1(x)  # BatchNorm applied to conv1 output for stable activation distributions
         x = self.pool1(x)
+
         x = 1.7159 * torch.tanh(self.conv2(x) * 2 / 3)
+        x = self.bn2(x)  # batchNorm applied to conv2 output
         x = self.pool2(x)
-        x = x.view(-1, 16 * 6 * 6)  # Flatten
+
+        x = x.view(-1, 16 * 6 * 6)  # flatten
+
         x = 1.7159 * torch.tanh(self.fc1(x) * 2 / 3)
+        x = self.dropout(x)  # dropout to reduce overfitting after fc1 layer
         x = 1.7159 * torch.tanh(self.fc2(x) * 2 / 3)
+
 
         # Compute Euclidean distance
         dists = torch.cdist(x, self.centers)
