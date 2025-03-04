@@ -3,6 +3,7 @@ import "./App.css";
 import UploadDataset from "./UploadDataset";
 import DownloadModel from "./DownloadModel";
 import axios from "axios";
+const API_BASE_URL = "http://localhost:5000";
 
 function App() {
   const [trainingStatus, setTrainingStatus] = useState("");
@@ -25,7 +26,7 @@ function App() {
         formData.append("file", file);
         formData.append("useGrayscale", useGrayscale); // Include grayscale setting in form data
 
-        const uploadResponse = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/upload-dataset`, formData);
+        const uploadResponse = await axios.post(`${API_BASE_URL}/upload-dataset`, formData);
 
         if (uploadResponse.data.message) {
           setTrainingStatus(uploadResponse.data.message);
@@ -34,7 +35,7 @@ function App() {
       } else {
         // No file uploaded, default to MNIST dataset
         setTrainingStatus("No dataset uploaded. Defaulting to MNIST dataset...");
-        const mnistResponse = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/upload-dataset`, { useGrayscale });
+        const mnistResponse = await axios.post(`${API_BASE_URL}/upload-dataset`, { useGrayscale });
 
 
         if (mnistResponse.data.message) {
@@ -51,7 +52,7 @@ function App() {
   const getFirstEpochTime = async () => {
     try {
       setTrainingStatus("Calculating first epoch duration...");
-      const epochTimeResponse = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/epoch-time`, { num_classes: numClasses });
+      const epochTimeResponse = await axios.post(`${API_BASE_URL}/epoch-time`, { num_classes: numClasses });
 
 
       if (epochTimeResponse.data.epoch_time) {
@@ -82,7 +83,7 @@ function App() {
         }
       }, epochTime * 1000);
 
-      const trainResponse = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/train`, {
+      const trainResponse = await axios.post(`${API_BASE_URL}/train`, {
         num_epochs: numEpochs,
         num_classes: numClasses, // Send number of classes to backend
       });
@@ -115,7 +116,7 @@ function App() {
       formData.append("useGrayscale", useGrayscale); // Send grayscale option to the backend
   
       setTestImageStatus("Testing image...");
-      const response = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/test-image`, formData);
+      const response = await axios.post(`${API_BASE_URL}/test-image`, formData);
   
       if (response.data.predicted_class) {
         setTestImageStatus(
