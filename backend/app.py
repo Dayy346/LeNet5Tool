@@ -209,6 +209,8 @@ def epoch_time():
         return jsonify({"error": "Dataset not uploaded or processed yet!"}), 400
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)  # reduces learning rate by half every 10 epochs, found that a higher learning rate was better for earlier training while a lower learning rate was better for later training(fixes overfitting)
+
     num_epochs = 1  # Only train for one epoch to measure time
     data = request.get_json()
     num_classes = int(data.get("num_classes", 10))  # Default to 10 classes
@@ -256,6 +258,8 @@ def train_model():
     model.beta = nn.Parameter(torch.randn(model.num_classes).to(device) * 0.1 + 1.0)  # Update scaling factors
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4) #L2 regularization
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)   # reduces learning rate by half every 10 epochs, found that a higher learning rate was better for earlier training while a lower learning rate was better for later training(fixes overfitting)
+
     train_errors = []  # List to store training errors
     test_errors = []   # List to store test errors
     train_accuracies = []  # Store train accuracies for each epoch
@@ -304,7 +308,7 @@ def train_model():
         # Send progress to frontend
         progress = int((epoch + 1) / num_epochs * 100)
         print(f"Progress: {progress}%")
-
+        scheduler.step()  # Update the learning rate for the next epoch
     torch.save(model.state_dict(), model_path)  # Save the model
     return jsonify({"message": "Training completed!", "train_errors": train_errors, "test_errors": test_errors,
     "train_accuracy": train_accuracies[-1],  # Return the final train accuracy
