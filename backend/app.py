@@ -83,11 +83,17 @@ model_path = "./CustomLeNetModel.pth"
 # Weight initialization
 def init_weights(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-        fan_in = m.weight.size(1)  # Number of input connections
-        bound = 2.4 / fan_in
-        nn.init.uniform_(m.weight, -bound, bound)
+        nn.init.xavier_uniform_(m.weight)  # Xavier initialization for balanced variance, Testing it out for now
         if m.bias is not None:
             nn.init.zeros_(m.bias)
+
+# def init_weights(m):
+#     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+#         fan_in = m.weight.size(1)  # Number of input connections
+#         bound = 2.4 / fan_in
+#         nn.init.uniform_(m.weight, -bound, bound)
+#         if m.bias is not None:
+#             nn.init.zeros_(m.bias)
 
 model.apply(init_weights)
 
